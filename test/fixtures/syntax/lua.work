@@ -1,0 +1,4 @@
+local doc = [[
+first line
+]]
+local n = 2 -- 一

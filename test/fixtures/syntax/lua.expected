@@ -1,0 +1,28 @@
+delete_above row 2  from 2
+  line 3
+    "second line" @string.lua TareDelete
+    "                             " TareDelete
+delete_above row 3  from 4
+  line 5
+    "vim" @variable.lua TareDelete
+    "." @punctuation.delimiter.lua TareDelete
+    "cmd" @variable.lua @variable.member.lua @function.call.lua TareDelete
+    "(" @punctuation.bracket.lua TareDelete
+    "[[" @string.lua TareDelete
+    "set" @string.lua @keyword.vim TareDelete
+    " " @string.lua TareDelete
+    "number" @string.lua @variable.builtin.vim TareDelete
+    "]]" @string.lua TareDelete
+    ")" @punctuation.bracket.lua TareDelete
+    "                 " TareDelete
+  line 6
+    "local" @keyword.lua TareDelete
+    " " TareDelete
+    "n" @variable.lua TareDelete
+    " " TareDelete
+    "=" @operator.lua TareDelete
+    " " TareDelete
+    "1" @number.lua TareDelete
+    " " TareDelete
+    "-- 一" @comment.lua TareDelete
+    "                       " TareDelete

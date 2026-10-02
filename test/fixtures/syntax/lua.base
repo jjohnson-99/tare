@@ -1,0 +1,6 @@
+local doc = [[
+first line
+second line
+]]
+vim.cmd([[set number]])
+local n = 1 -- 一

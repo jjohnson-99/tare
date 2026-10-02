@@ -1,0 +1,42 @@
+delete_above row 1  from 1
+  line 2
+    "   合計 = a + b," @comment.c TareDelete
+    "                        " TareDelete
+delete_above row 4  from 5
+  line 6
+    "        " TareDelete
+    "int" @type.builtin.c TareDelete
+    " " TareDelete
+    "s" @variable.c TareDelete
+    " " TareDelete
+    "=" @operator.c TareDelete
+    " " TareDelete
+    "a" @variable.c TareDelete
+    " " TareDelete
+    "+" @operator.c TareDelete
+    " " TareDelete
+    "b" @variable.c TareDelete
+    ";" @punctuation.delimiter.c TareDelete
+    "  " TareDelete
+    "// 合計" @comment.c TareDelete
+    "         " TareDelete
+  line 7
+    "        " TareDelete
+    "printf" @variable.c @function.call.c TareDelete
+    "(" @punctuation.bracket.c TareDelete
+    ""和 %d" @string.c TareDelete
+    "\n" @string.c @string.escape.c TareDelete
+    """ @string.c TareDelete
+    "," @punctuation.delimiter.c TareDelete
+    " " TareDelete
+    "s" @variable.c TareDelete
+    ")" @punctuation.bracket.c TareDelete
+    ";" @punctuation.delimiter.c TareDelete
+    "           " TareDelete
+  line 8
+    "        " TareDelete
+    "return" @keyword.return.c TareDelete
+    " " TareDelete
+    "s" @variable.c TareDelete
+    ";" @punctuation.delimiter.c TareDelete
+    "                       " TareDelete

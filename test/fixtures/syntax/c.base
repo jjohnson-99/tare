@@ -1,0 +1,9 @@
+/* Adds two numbers:
+   合計 = a + b,
+   wrapping on overflow. */
+int add(int a, int b)
+{
+	int s = a + b;	// 合計
+	printf("和 %d\n", s);
+	return s;
+}

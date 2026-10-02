@@ -1,0 +1,436 @@
+*tare.txt*    Changes against a pinned base, shown in the buffer
+
+Author:   Jeremy Johnson <js.johnson990@gmail.com>
+License:  BSD
+
+==============================================================================
+CONTENTS                                                       *tare-contents*
+
+    1.  Introduction ........................ |tare-introduction|
+    2.  Requirements ........................ |tare-requirements|
+    3.  Installation ........................ |tare-installation|
+    4.  Usage ............................... |tare-usage|
+    5.  Commands ............................ |tare-commands|
+    6.  The base ............................ |tare-base|
+    7.  The float ........................... |tare-float|
+    8.  The view ............................ |tare-view|
+    9.  Options ............................. |tare-options|
+        9.1 Base ............................ |tare-options-base|
+        9.2 Colours ......................... |tare-options-colours|
+        9.3 Behaviour ....................... |tare-options-behaviour|
+        9.4 When a change takes effect ...... |tare-options-timing|
+    10. Changing colours .................... |tare-colours|
+        10.1 Samples ........................ |tare-colours-samples|
+        10.2 Overriding a group ............. |tare-colours-override|
+    11. Highlight groups .................... |tare-highlights|
+    12. Limitations ......................... |tare-limitations|
+
+==============================================================================
+1. INTRODUCTION                                     *tare* *tare-introduction*
+
+A scale's tare zeroes it against a reference. tare zeroes a git working tree
+against a base -- by default `upstream/main` -- and shows only the difference,
+without leaving the file you are in.
+
+Two surfaces:
+
+- A float listing every file changed against the base, with its status and
+  line counts. Pick one to open it.
+- A view, toggled per buffer: added lines get a tinted background, removed
+  lines are drawn in place as virtual lines in their own syntax colours, and
+  the status line carries `+N -M`. No split.
+
+The other side of the comparison is always the working tree: committed,
+staged, unstaged and unsaved changes all show. The base side is the
+merge-base of `HEAD` and the base ref, the way a forge shows a pull request,
+so commits on the base that your branch lacks never show as removals.
+
+The buffer is the real file and stays editable; the view re-diffs shortly
+after each edit. tare never writes to the buffer, the index or any ref.
+
+==============================================================================
+2. REQUIREMENTS                                            *tare-requirements*
+
+- Neovim 0.11 or newer. Developed and verified against 0.11.4.
+- `git` on `$PATH`.
+- 'termguicolors', or a GUI, for the colours. Without true colour the
+  computed groups have nothing to draw with.
+- A treesitter parser for a file's language, for syntax colours on removed
+  lines. Without one, removed lines are drawn in plain text over their
+  background; nothing errors.
+
+==============================================================================
+3. INSTALLATION                                            *tare-installation*
+
+With lazy.nvim, from a local checkout: >lua
+
+    {
+        "tare",
+        dir = "~/plugins/tare",
+        -- Colour options are read as plugin/tare.vim is sourced: init, not
+        -- config.
+        init = function()
+            vim.g.tare_BackgroundColor = 0x191724
+        end,
+        config = function()
+            vim.keymap.set("n", "<leader>zf", vim.cmd.Tare)
+            vim.keymap.set("n", "<leader>zd", vim.cmd.TareToggle)
+            vim.keymap.set("n", "<leader>zb", ":TareBase ")
+        end
+    }
+<
+tare maps no keys of its own outside the float and the view. Run
+`:helptags ALL` after installing.
+
+==============================================================================
+4. USAGE                                                          *tare-usage*
+
+In a repository, `:Tare` opens the float. Move to a file and press <CR>: it
+opens in the window you came from with the view on. `]c` and `[c` move between
+changes. `:TareToggle` turns the view off or on in any file of the repository.
+
+To compare against something other than the default, `:TareBase <ref>`, with
+completion. The choice is remembered for that repository (|tare-base|).
+
+==============================================================================
+5. COMMANDS                                                    *tare-commands*
+
+:Tare                                                                  *:Tare*
+        Open the float for the current buffer's repository, or close it.
+
+:TareToggle                                                      *:TareToggle*
+:TareEnable                                                      *:TareEnable*
+:TareDisable                                                    *:TareDisable*
+        Turn the view on or off for the current buffer. Enabling refuses,
+        with a message, outside a repository and on a binary file.
+
+:TareBase                                                          *:TareBase*
+        Show the base: its ref, the merge-base, and whether it is the
+        default, set, or pinned.
+
+:TareBase {ref}
+        Compare this repository against {ref}. Any ref git accepts: a branch,
+        `origin/feat/x`, a tag, a SHA. It follows the ref, so after a fetch
+        `upstream/main` means the new `upstream/main`.
+
+:TareBase! [{ref}]
+        Pin: store the merge-base of `HEAD` and {ref} (or the current
+        merge-base, with no {ref}) as a fixed commit that no fetch moves.
+
+:TareBase -
+        Forget this repository's base and go back to |g:tare_DefaultBases|.
+
+:TareRefresh                                                    *:TareRefresh*
+        Resolve the base again and redraw every view in the repository. Also
+        happens on |FocusGained| when the merge-base has moved.
+
+==============================================================================
+6. THE BASE                                                        *tare-base*
+
+A repository with no base set uses the first of |g:tare_DefaultBases| that
+exists. `:TareBase` stores a choice in `stdpath('data')/tare/bases.json`,
+keyed by the repository's top-level directory, so each worktree has its own.
+Only `:TareBase` writes that file.
+
+The base side of every diff is `git merge-base HEAD <ref>`. It is recomputed
+when the float opens, when a view is enabled, on `:TareRefresh`, and on
+|FocusGained|, so a commit, rebase or fetch is picked up without a restart.
+
+tare runs only read-only git commands (`rev-parse`, `merge-base`, `diff`,
+`ls-files`, `show`, `cat-file`, `for-each-ref`), each with
+`--no-optional-locks`.
+
+==============================================================================
+7. THE FLOAT                                                      *tare-float*
+>
+    ╭──────────── tare ↔ upstream/main @ 8c6a30f3 ─────────────╮
+    │ M  src/planner/union.cpp                      +212   -14 │
+    │ A  src/op/union_all.cpp                       +340       │
+    │ D  src/op/old_union.cpp                              -88 │
+    │ R  include/x.hpp → include/y.hpp                +3    -3 │
+    ╰──────────────────────────────────────────────────────────╯
+<
+Status is `M` modified, `A` added (or untracked), `D` deleted, `R` renamed.
+Binary files say `bin`. A file whose only change is its final newline or its
+line endings says `unchanged`, as the view would. Counts are of the files as
+saved; unsaved edits show in the view's status line instead.
+
+The cursor starts on the current file's row. Leaving the float closes it.
+
+    <CR>        Open the file in the window you came from; turn the view on
+                if |g:tare_ViewOnOpen|.
+    o           Open without turning the view on.
+    b           Change the base (as `:TareBase`, with completion; `-` resets).
+    r           Refresh.
+    q  <Esc>    Close.
+
+A deleted file opens as a read-only copy of its base version, named
+`tare://<sha>/<path>`, with its filetype set. It is wiped when hidden;
+reopen it from the float.
+
+==============================================================================
+8. THE VIEW                                                        *tare-view*
+
+- Added lines: |hl-TareAdd| over the whole row.
+- Removed lines: virtual lines above the code that replaced them, in
+  |hl-TareDelete|, coloured with the base version's syntax
+  (|g:tare_SyntaxDeleted|). They cannot take the cursor or be yanked.
+- New files: no highlights.
+
+The status line gains a segment while the view is on, in front of your own
+line, and gets your line back when it is turned off: >
+
+    tare ↔ upstream/main  +212 -14
+    tare ↔ upstream/main  new · 340 lines
+    tare ↔ upstream/main  deleted · 88 lines
+    tare ↔ upstream/main  unchanged
+<
+The counts include unsaved edits. A pinned base shows its short SHA. For a
+custom status line, call `tare#statusline()` from it.
+
+`]c` and `[c` jump to the next and previous change, with a count, in normal,
+visual and operator-pending mode (`d]c` is linewise). They exist only while
+the view is on, and any map you had on them comes back after.
+
+==============================================================================
+9. OPTIONS                                                      *tare-options*
+
+------------------------------------------------------------------------------
+9.1 Base                                                   *tare-options-base*
+
+                                                         *g:tare_DefaultBases*
+g:tare_DefaultBases ~
+        Refs tried in order for a repository with no base set; the first that
+        exists wins.
+        Default: `['upstream/main', 'origin/main', 'main', 'master']`
+
+------------------------------------------------------------------------------
+9.2 Colours                                             *tare-options-colours*
+
+                                                                *g:tare_Style*
+g:tare_Style ~
+        `'background'`: tint each changed row's background, leave its text
+        alone. `'text'`: colour the text instead and leave the background
+        alone, which keeps a transparent window transparent. `'background'`
+        needs a colour to blend against: |g:tare_BackgroundColor| or
+        `Normal`'s own background. With neither, it falls back to `'text'`.
+        Default: `'background'`
+
+                                                              *g:tare_Palette*
+g:tare_Palette ~
+        The hues added and removed rows are tinted toward:
+
+        Name         Add        Delete     ~
+        `github`       #3FB950    #FF5555    GitHub dark mode
+        `rose-pine`    #9CCFD8    #EB6F92    foam / love: cyan and pink
+        `vivid`        #00CC44    #FF3333    saturated, high contrast
+        `muted`        #7FA87F    #BE8080    light or low-contrast terminal
+
+        An unknown name falls back to `github`.
+        Default: `'github'`
+
+                                                             *g:tare_AddColor*
+                                                          *g:tare_DeleteColor*
+g:tare_AddColor ~
+g:tare_DeleteColor ~
+        One hue as `0xRRGGBB`, overriding the palette's. -1 takes it from the
+        palette.
+        Default: `-1`
+
+                                                                *g:tare_Blend*
+g:tare_Blend ~
+        Percent of the hue mixed into the background, `'background'` style
+        only. 20 is a hint, 30 reads clearly, 45 is loud.
+        Default: `30`
+
+                                                             *g:tare_Vibrance*
+g:tare_Vibrance ~
+        Percent to push the hues toward full saturation, keeping their
+        brightness. Raise it when the tint reads as grey. 0 uses the colour as
+        given.
+        Default: `0`
+
+                                                      *g:tare_BackgroundColor*
+g:tare_BackgroundColor ~
+        The colour to blend against, as `0xRRGGBB`. Neovim cannot read the
+        terminal's own background, so with a transparent `Normal` set this to
+        the terminal's colour (rose-pine's base is `0x191724`). -1 uses
+        `Normal`'s background, if it has one.
+        Default: `-1`
+
+------------------------------------------------------------------------------
+9.3 Behaviour                                         *tare-options-behaviour*
+
+                                                        *g:tare_SyntaxDeleted*
+g:tare_SyntaxDeleted ~
+        Colour removed lines with their syntax, parsed from the base version
+        by treesitter. Base files of 256 KiB or more are left plain.
+        Default: `1`
+
+                                                             *g:tare_Debounce*
+g:tare_Debounce ~
+        Milliseconds after an edit before the buffer is diffed again.
+        Default: `150`
+
+                                                           *g:tare_ViewOnOpen*
+g:tare_ViewOnOpen ~
+        Turn the view on for a file opened from the float with <CR>.
+        Default: `1`
+
+                                                           *g:tare_FloatWidth*
+g:tare_FloatWidth ~
+        Float width as a fraction of 'columns'.
+        Default: `0.6`
+
+------------------------------------------------------------------------------
+9.4 When a change takes effect                           *tare-options-timing*
+
+The colour options of |tare-options-colours| are read when the highlight
+groups are computed: once as the plugin is sourced, and again on every
+|ColorScheme|. Set them in lazy.nvim's `init`, not `config`. To try one
+live: >
+
+    :let g:tare_Blend = 40
+    :doautocmd ColorScheme
+<
+|g:tare_SyntaxDeleted| is read at each render, so a change shows at the next
+edit, resize or window entry, or at once with `:TareRefresh`.
+|g:tare_DefaultBases| is read at each resolution. The rest are read when used.
+
+==============================================================================
+10. CHANGING COLOURS                                            *tare-colours*
+
+Three knobs decide a tinted row: the hue (|g:tare_Palette|, or a single
+|g:tare_AddColor| / |g:tare_DeleteColor|), how much of it is mixed in
+(|g:tare_Blend|), and how saturated it is first (|g:tare_Vibrance|). All three
+are blended against |g:tare_BackgroundColor|.
+
+A tint that reads as grey is too little of a hue that is too pale: raise
+|g:tare_Vibrance| before |g:tare_Blend|. A removed row that reads as purple
+has a pink hue (rose-pine's love, `0xEB6F92`): use a red.
+
+------------------------------------------------------------------------------
+10.1 Samples                                            *tare-colours-samples*
+
+Each sample is an `init` block. The resulting backgrounds are against
+rose-pine's base, `0x191724`.
+
+Subtle, close to GitHub (add #244731, delete #5E2932): >lua
+
+    vim.g.tare_BackgroundColor = 0x191724
+    vim.g.tare_Palette         = "github"
+<
+Clearly green and red (add #0F5720, delete #750D15): >lua
+
+    vim.g.tare_BackgroundColor = 0x191724
+    vim.g.tare_Palette         = "github"
+    vim.g.tare_Blend           = 40
+    vim.g.tare_Vibrance        = 50
+<
+Saturated (add #10562F, delete #692029): >lua
+
+    vim.g.tare_BackgroundColor = 0x191724
+    vim.g.tare_Palette         = "vivid"
+    vim.g.tare_Blend           = 35
+<
+In rose-pine's own colours, cyan and pink (add #394551, delete #4D2D3F): >lua
+
+    vim.g.tare_BackgroundColor = 0x191724
+    vim.g.tare_Palette         = "rose-pine"
+    vim.g.tare_Blend           = 25
+<
+GitHub's green with rose-pine's pink for removals (add #244731, delete
+#583145): >lua
+
+    vim.g.tare_BackgroundColor = 0x191724
+    vim.g.tare_Palette         = "github"
+    vim.g.tare_DeleteColor     = 0xEB6F92
+<
+Your own hues: >lua
+
+    vim.g.tare_BackgroundColor = 0x191724
+    vim.g.tare_AddColor        = 0x2EA043
+    vim.g.tare_DeleteColor     = 0xF85149
+    vim.g.tare_Blend           = 35
+<
+Text instead of backgrounds, keeping a transparent window clear. Added rows
+are drawn in the add hue; removed rows in the delete hue, with their syntax
+contributing only bold and italic: >lua
+
+    vim.g.tare_Style   = "text"
+    vim.g.tare_Palette = "github"
+<
+------------------------------------------------------------------------------
+10.2 Overriding a group                                *tare-colours-override*
+
+|hl-TareAdd|, |hl-TareDelete| and the text groups are computed, and set again
+on every |ColorScheme|, so a plain `:highlight TareAdd ...` lasts only until
+the next colorscheme change. To set one for good, do it from a |ColorScheme|
+autocmd of your own, declared after tare has loaded so it runs second, and
+once directly for the current colorscheme: >lua
+
+    config = function()
+        local function colours()
+            vim.api.nvim_set_hl(0, "TareAdd",    { bg = "#1f3a2a" })
+            vim.api.nvim_set_hl(0, "TareDelete", { bg = "#4a1f28" })
+        end
+        colours()
+        vim.api.nvim_create_autocmd("ColorScheme", { callback = colours })
+    end
+<
+To use the colorscheme's own diff colours instead: >lua
+
+    local function colours()
+        vim.api.nvim_set_hl(0, "TareAdd",    { link = "DiffAdd" })
+        vim.api.nvim_set_hl(0, "TareDelete", { link = "DiffDelete" })
+    end
+<
+Many colorschemes, rose-pine among them, make those blue-grey and mauve
+rather than green and red, which is why tare does not use them by default.
+
+==============================================================================
+11. HIGHLIGHT GROUPS                                         *tare-highlights*
+
+Computed, set again on every |ColorScheme| (|tare-colours-override|):
+
+    *hl-TareAdd*          Added rows: a background, or a foreground in the
+                        `'text'` style.
+    *hl-TareDelete*       Removed rows, likewise. Syntax colours are drawn
+                        under it, so its background always shows.
+    *hl-TareAddText*      `+N` in the status line.
+    *hl-TareDeleteText*   `-M` and `deleted · N lines` in the status line.
+    *hl-TareNew*          `new · N lines` in the status line.
+
+Links, overridable the ordinary way:
+
+    *hl-TareFloatAdd*     `+N` in the float           -> TareAddText
+    *hl-TareFloatDelete*  `-M` in the float           -> TareDeleteText
+    *hl-TareFloatStatus*  `M A D R` in the float      -> Identifier
+    *hl-TareFloatTitle*   The float's title           -> FloatTitle
+
+==============================================================================
+12. LIMITATIONS                                             *tare-limitations*
+
+Removed lines longer than the window are cut off at its edge, not wrapped.
+Virtual lines never wrap.
+
+Removed lines above the first line are not reached by `gg`. tare scrolls
+them into view when the view is enabled; afterwards `<C-y>` or `<C-b>` reaches
+them.
+
+A file whose only change is its final newline, or LF to CRLF, shows
+`unchanged`, where `git diff` counts it.
+
+Extmarks belong to the buffer, so with one buffer in two windows of different
+widths, removed-line backgrounds are padded for the current window.
+
+`:set number`, a sign column appearing, and other changes to the text width
+that do not resize the window take effect at the next edit or window entry.
+
+In a repository that converts line endings or runs filters on checkout, the
+base side is the stored blob and the buffer is the checked-out file, so lines
+can show as changed that are not.
+
+Submodules are listed as modified but cannot be viewed.
+
+ vim:tw=78:ts=8:noet:ft=help:norl:

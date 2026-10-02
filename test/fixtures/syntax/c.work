@@ -1,0 +1,6 @@
+/* Adds two numbers:
+   wrapping on overflow. */
+int add(int a, int b)
+{
+	return a + b;
+}
