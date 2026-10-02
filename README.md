@@ -29,8 +29,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim), from a local checkout:
 
 ```lua
 {
-    "tare",
-    dir = "~/plugins/tare",
+    "jjohnson-99/tare",
     -- Colour options are read as plugin/tare.vim is sourced: init, not config.
     init = function()
         vim.g.tare_BackgroundColor = 0x191724   -- see "Changing colours"
