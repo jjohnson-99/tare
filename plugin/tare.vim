@@ -17,6 +17,12 @@ if !exists('g:tare_DefaultBases')
     let g:tare_DefaultBases = ['upstream/main', 'origin/main', 'main', 'master']
 endif
 
+" refs the picker and :TareBase completion leave out: globs over short names, a
+" remote branch's also tried without its remote
+if !exists('g:tare_HiddenRefs')
+    let g:tare_HiddenRefs = ['backup/*', 'archive/*']
+endif
+
 " 'background' tints a changed row's background (see g:tare_BackgroundColor);
 " 'text' colours its text instead
 if !exists('g:tare_Style')
@@ -158,6 +164,10 @@ function! s:highlights() abort
     highlight default link TareFloatDelete TareDeleteText
     highlight default link TareFloatStatus Identifier
     highlight default link TareFloatTitle  FloatTitle
+    highlight default link TarePickerCurrent Special
+    highlight default link TarePickerSha     Identifier
+    highlight default link TarePickerAge     Comment
+    highlight default link TarePickerRef     Constant
 endfunction
 
 call s:highlights()

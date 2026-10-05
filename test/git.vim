@@ -243,7 +243,7 @@ call assert_equal('tare: HEAD and main have no common ancestor',
 " Commands, completion and the status line, from a buffer in the repository.
 
 exe 'edit ' . fnameescape(s:B . '/f.txt')
-call assert_equal("\ntare: base main, merge-base " . s:E[:7], execute('TareBase'), ':TareBase')
+call assert_equal("\ntare: base main, merge-base " . s:E[:7], execute('TareBase main'), ':TareBase main')
 call assert_match('tare: unknown ref nope', execute('TareBase nope'), ':TareBase bad ref')
 call assert_equal("\ntare: base pinned at " . s:E[:7], execute('TareBase! main'), ':TareBase!')
 call assert_equal({'ref': s:E, 'pinned': v:true}, s:stored()[s:B], ':TareBase! stored')

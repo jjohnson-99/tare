@@ -575,8 +575,11 @@ function! tare#Hunk(dir) abort
 endfunction
 
 " :TareBase[!] [ref], for the current buffer's repository or [root]. With
-" neither a ref nor a bang it only reports; `-` goes back to the defaults.
+" neither a ref nor a bang it toggles the picker; `-` goes back to the defaults.
 function! tare#Base(pin, ref, ...) abort
+    if !a:pin && empty(a:ref)
+        return tare#picker#Toggle()
+    endif
     try
         let root = a:0 ? a:1 : tare#git#root(bufnr('%'))
         if a:ref ==# '-'
@@ -585,8 +588,7 @@ function! tare#Base(pin, ref, ...) abort
             endif
             let base = tare#git#reset(root)
         else
-            let base = !a:pin && empty(a:ref) ? tare#git#resolve(root)
-                \ : tare#git#set(root, a:ref, a:pin)
+            let base = tare#git#set(root, a:ref, a:pin)
         endif
         call s:reload(root)
     catch /^tare: /

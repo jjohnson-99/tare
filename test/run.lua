@@ -38,7 +38,7 @@ local data_home = vim.fn.tempname()
 vim.env.XDG_DATA_HOME = data_home
 
 local SUITES = { "ops.vim", "invariant.vim", "view.vim", "highlight.vim", "git.vim", "popup.vim",
-                 "syntax.vim" }
+                 "picker.vim", "syntax.vim" }
 
 local failed = 0
 for _, name in ipairs(SUITES) do

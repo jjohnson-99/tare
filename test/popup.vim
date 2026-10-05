@@ -268,21 +268,23 @@ call assert_equal(s:winstl, &l:statusline, 'deleted status line left')
 
 
 "=================================================
-" Changing the base, refreshing; completion follows the float's repository.
+" Changing the base through the picker (test/picker.vim), refreshing;
+" completion follows the float's repository.
 
 call s:open(s:R . '/mod.txt')
 exe 'cd ' . fnameescape(s:tmp)
 Tare
-call assert_equal(['v0'], tare#popup#complete('v', '', 0), 'completion repository')
-silent call feedkeys("bv0\<CR>", 'xt')
+normal b
+call assert_equal(['v0'], tare#picker#complete('v', '', 0), 'completion repository')
+silent call feedkeys("/v0\<CR>", 'xt')
 call assert_equal(1, len(s:floats()), 'float after b')
 call assert_match('^ tare ↔ v0 @ ', s:title(), 'title after b')
 call assert_equal(' A  later.txt                            +1     ', getline(s:row('later.txt')),
     \ 'listing after b')
 call assert_equal(s:row('mod.txt'), line('.'), 'cursor kept its file')
-silent call feedkeys("b-\<CR>", 'xt')
+silent normal b-
 call assert_match('^ tare ↔ main @ ', s:title(), 'title after b -')
-silent call feedkeys("b\<Esc>", 'xt')
+exe "normal b\<Esc>"
 call assert_match('^ tare ↔ main @ ', s:title(), 'b cancelled')
 
 call writefile(['f'], s:R . '/fresh.txt')

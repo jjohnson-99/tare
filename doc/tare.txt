@@ -13,17 +13,18 @@ CONTENTS                                                       *tare-contents*
     5.  Commands ............................ |tare-commands|
     6.  The base ............................ |tare-base|
     7.  The float ........................... |tare-float|
-    8.  The view ............................ |tare-view|
-    9.  Options ............................. |tare-options|
-        9.1 Base ............................ |tare-options-base|
-        9.2 Colours ......................... |tare-options-colours|
-        9.3 Behaviour ....................... |tare-options-behaviour|
-        9.4 When a change takes effect ...... |tare-options-timing|
-    10. Changing colours .................... |tare-colours|
-        10.1 Samples ........................ |tare-colours-samples|
-        10.2 Overriding a group ............. |tare-colours-override|
-    11. Highlight groups .................... |tare-highlights|
-    12. Limitations ......................... |tare-limitations|
+    8.  The picker .......................... |tare-picker|
+    9.  The view ............................ |tare-view|
+    10. Options ............................. |tare-options|
+        10.1 Base ........................... |tare-options-base|
+        10.2 Colours ........................ |tare-options-colours|
+        10.3 Behaviour ...................... |tare-options-behaviour|
+        10.4 When a change takes effect ..... |tare-options-timing|
+    11. Changing colours .................... |tare-colours|
+        11.1 Samples ........................ |tare-colours-samples|
+        11.2 Overriding a group ............. |tare-colours-override|
+    12. Highlight groups .................... |tare-highlights|
+    13. Limitations ......................... |tare-limitations|
 
 ==============================================================================
 1. INTRODUCTION                                     *tare* *tare-introduction*
@@ -75,7 +76,7 @@ With lazy.nvim, from a local checkout: >lua
         config = function()
             vim.keymap.set("n", "<leader>zf", vim.cmd.Tare)
             vim.keymap.set("n", "<leader>zd", vim.cmd.TareToggle)
-            vim.keymap.set("n", "<leader>zb", ":TareBase ")
+            vim.keymap.set("n", "<leader>zb", vim.cmd.TareBase)
         end
     }
 <
@@ -89,8 +90,10 @@ In a repository, `:Tare` opens the float. Move to a file and press <CR>: it
 opens in the window you came from with the view on. `]c` and `[c` move between
 changes. `:TareToggle` turns the view off or on in any file of the repository.
 
-To compare against something other than the default, `:TareBase <ref>`, with
-completion. The choice is remembered for that repository (|tare-base|).
+To compare against something other than the default, `:TareBase` opens a
+picker of your branch's commits and of every branch (|tare-picker|), and
+`:TareBase <ref>` takes a ref by name, with completion. The choice is
+remembered for that repository (|tare-base|).
 
 ==============================================================================
 5. COMMANDS                                                    *tare-commands*
@@ -105,13 +108,14 @@ completion. The choice is remembered for that repository (|tare-base|).
         with a message, outside a repository and on a binary file.
 
 :TareBase                                                          *:TareBase*
-        Show the base: its ref, the merge-base, and whether it is the
-        default, set, or pinned.
+        Open the picker (|tare-picker|), whose title shows the current base
+        and merge-base. In the picker, close it.
 
 :TareBase {ref}
         Compare this repository against {ref}. Any ref git accepts: a branch,
         `origin/feat/x`, a tag, a SHA. It follows the ref, so after a fetch
-        `upstream/main` means the new `upstream/main`.
+        `upstream/main` means the new `upstream/main`. Completion leaves out
+        |g:tare_HiddenRefs|.
 
 :TareBase! [{ref}]
         Pin: store the merge-base of `HEAD` and {ref} (or the current
@@ -137,8 +141,12 @@ when the float opens, when a view is enabled, on `:TareRefresh`, and on
 |FocusGained|, so a commit, rebase or fetch is picked up without a restart.
 
 tare runs only read-only git commands (`rev-parse`, `merge-base`, `diff`,
-`ls-files`, `show`, `cat-file`, `for-each-ref`), each with
+`ls-files`, `show`, `cat-file`, `for-each-ref`, `log`), each with
 `--no-optional-locks`.
+
+Comparing against a commit C shows what changed from C to the working tree:
+the base side is the merge-base of `HEAD` and C, which is C itself for any
+commit in `HEAD`'s history.
 
 ==============================================================================
 7. THE FLOAT                                                      *tare-float*
@@ -160,7 +168,8 @@ The cursor starts on the current file's row. Leaving the float closes it.
     <CR>        Open the file in the window you came from; turn the view on
                 if |g:tare_ViewOnOpen|.
     o           Open without turning the view on.
-    b           Change the base (as `:TareBase`, with completion; `-` resets).
+    b           Change the base in the picker (|tare-picker|). The float comes
+                back when the picker closes, listed against the new base.
     r           Refresh.
     q  <Esc>    Close.
 
@@ -169,7 +178,45 @@ A deleted file opens as a read-only copy of its base version, named
 reopen it from the float.
 
 ==============================================================================
-8. THE VIEW                                                        *tare-view*
+8. THE PICKER                                                    *tare-picker*
+
+`:TareBase`, or `b` in the float, lists the commits of your branch to pick a
+base from: >
+
+    ╭──── tare base · feat/union · current: upstream/main @ 8c6a30f3 ────╮
+    │   a175aa3f  3h  feat(planner): run disti… (HEAD -> feat/union, or… │
+    │   d85efe9f  3h  test(union): drop optimizer guards made redundant… │
+    │   5e6f4b84  3d  Merge branch 'feat/distinct-phase-1' into feat/un… │
+    │   73a6acea  4d  fix(distinct): keep dist… (origin/feat/distinct-p… │
+    │ ● 8c6a30f3  3d  refactor(partition): explicit partition-to-GPU pl… │
+    ╰──── <CR> use  p pin  <Tab> branches  / ref  - default  q close ────╯
+<
+The rows are the commits of `HEAD` since it left the default base (the first
+of |g:tare_DefaultBases| that exists), in `git log`'s order, merged-in commits
+included; the last row is that merge-base itself. On the default base, or
+with none, they are the 50 latest commits of `HEAD` instead. Each row shows
+the short SHA, the age of the commit, its subject and its branches and tags,
+less |g:tare_HiddenRefs|. `●` marks the current base's merge-base, where the
+cursor starts.
+
+    <CR>        Use the row: the first name in its parentheses other than
+                `HEAD` and its branch, followed after a fetch like
+                `:TareBase {ref}`; for a row with none, the commit, pinned.
+                Names are listed the current base's first, then remote
+                branches, local branches and tags.
+    p           Pin the row's commit, as `:TareBase! {sha}`.
+    <Tab>       Switch to the local and remote branches, newest first, and
+                back. There <CR> uses the branch and `p` pins its
+                merge-base.
+    /           Type a ref, with completion. Nothing typed keeps the picker.
+    -           Back to the default base, as `:TareBase -`.
+    q  <Esc>    Close. From the float, back to the float.
+
+A pick reloads every view in the repository. The title shows the branch and
+the current base; the footer, the keys that fit.
+
+==============================================================================
+9. THE VIEW                                                        *tare-view*
 
 - Added lines: |hl-TareAdd| over the whole row.
 - Removed lines: virtual lines above the code that replaced them, in
@@ -193,10 +240,10 @@ visual and operator-pending mode (`d]c` is linewise). They exist only while
 the view is on, and any map you had on them comes back after.
 
 ==============================================================================
-9. OPTIONS                                                      *tare-options*
+10. OPTIONS                                                     *tare-options*
 
 ------------------------------------------------------------------------------
-9.1 Base                                                   *tare-options-base*
+10.1 Base                                                  *tare-options-base*
 
                                                          *g:tare_DefaultBases*
 g:tare_DefaultBases ~
@@ -204,8 +251,16 @@ g:tare_DefaultBases ~
         exists wins.
         Default: `['upstream/main', 'origin/main', 'main', 'master']`
 
+                                                           *g:tare_HiddenRefs*
+g:tare_HiddenRefs ~
+        Refs the picker and `:TareBase` completion leave out, as glob patterns
+        over short names (`backup/*` hides `backup/x`). A remote branch is
+        also tried without its remote, so `backup/*` hides
+        `origin/backup/x` too.
+        Default: `['backup/*', 'archive/*']`
+
 ------------------------------------------------------------------------------
-9.2 Colours                                             *tare-options-colours*
+10.2 Colours                                            *tare-options-colours*
 
                                                                 *g:tare_Style*
 g:tare_Style ~
@@ -259,7 +314,7 @@ g:tare_BackgroundColor ~
         Default: `-1`
 
 ------------------------------------------------------------------------------
-9.3 Behaviour                                         *tare-options-behaviour*
+10.3 Behaviour                                        *tare-options-behaviour*
 
                                                         *g:tare_SyntaxDeleted*
 g:tare_SyntaxDeleted ~
@@ -283,7 +338,7 @@ g:tare_FloatWidth ~
         Default: `0.6`
 
 ------------------------------------------------------------------------------
-9.4 When a change takes effect                           *tare-options-timing*
+10.4 When a change takes effect                          *tare-options-timing*
 
 The colour options of |tare-options-colours| are read when the highlight
 groups are computed: once as the plugin is sourced, and again on every
@@ -295,10 +350,11 @@ live: >
 <
 |g:tare_SyntaxDeleted| is read at each render, so a change shows at the next
 edit, resize or window entry, or at once with `:TareRefresh`.
-|g:tare_DefaultBases| is read at each resolution. The rest are read when used.
+|g:tare_DefaultBases| is read at each resolution, |g:tare_HiddenRefs| each
+time the picker lists. The rest are read when used.
 
 ==============================================================================
-10. CHANGING COLOURS                                            *tare-colours*
+11. CHANGING COLOURS                                           *tare-colours*
 
 Three knobs decide a tinted row: the hue (|g:tare_Palette|, or a single
 |g:tare_AddColor| / |g:tare_DeleteColor|), how much of it is mixed in
@@ -310,7 +366,7 @@ A tint that reads as grey is too little of a hue that is too pale: raise
 has a pink hue (rose-pine's love, `0xEB6F92`): use a red.
 
 ------------------------------------------------------------------------------
-10.1 Samples                                            *tare-colours-samples*
+11.1 Samples                                            *tare-colours-samples*
 
 Each sample is an `init` block. The resulting backgrounds are against
 rose-pine's base, `0x191724`.
@@ -361,7 +417,7 @@ contributing only bold and italic: >lua
     vim.g.tare_Palette = "github"
 <
 ------------------------------------------------------------------------------
-10.2 Overriding a group                                *tare-colours-override*
+11.2 Overriding a group                                *tare-colours-override*
 
 |hl-TareAdd|, |hl-TareDelete| and the text groups are computed, and set again
 on every |ColorScheme|, so a plain `:highlight TareAdd ...` lasts only until
@@ -389,7 +445,7 @@ Many colorschemes, rose-pine among them, make those blue-grey and mauve
 rather than green and red, which is why tare does not use them by default.
 
 ==============================================================================
-11. HIGHLIGHT GROUPS                                         *tare-highlights*
+12. HIGHLIGHT GROUPS                                         *tare-highlights*
 
 Computed, set again on every |ColorScheme| (|tare-colours-override|):
 
@@ -407,9 +463,13 @@ Links, overridable the ordinary way:
     *hl-TareFloatDelete*  `-M` in the float           -> TareDeleteText
     *hl-TareFloatStatus*  `M A D R` in the float      -> Identifier
     *hl-TareFloatTitle*   The float's title           -> FloatTitle
+    *hl-TarePickerCurrent* `●` in the picker          -> Special
+    *hl-TarePickerSha*    SHAs in the picker          -> Identifier
+    *hl-TarePickerAge*    Ages in the picker          -> Comment
+    *hl-TarePickerRef*    Branches and tags in it     -> Constant
 
 ==============================================================================
-12. LIMITATIONS                                             *tare-limitations*
+13. LIMITATIONS                                             *tare-limitations*
 
 Removed lines longer than the window are cut off at its edge, not wrapped.
 Virtual lines never wrap.

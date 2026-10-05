@@ -181,7 +181,8 @@ function! s:config(width, height) abort
         \ 'border': 'rounded', 'title': [[title, 'TareFloatTitle']], 'title_pos': 'center'}
 endfunction
 
-function! s:show(root) abort
+" The cursor starts on [path], or else on the current window's file.
+function! s:show(root, ...) abort
     let origin = win_getid()
     let base = tare#git#resolve(a:root)
     let entries = s:list(a:root, base)
@@ -195,7 +196,7 @@ function! s:show(root) abort
         call nvim_set_option_value(opt, val, {'win': s:float.win, 'scope': 'local'})
     endfor
     call s:draw()
-    let here = s:path(winbufnr(origin), a:root)
+    let here = a:0 ? a:1 : s:path(winbufnr(origin), a:root)
     let row = index(map(copy(entries), 'v:val.path'), here)
     call cursor(max([row, 0]) + 1, 1)
     for [lhs, call] in items(s:KEYS)
@@ -287,16 +288,25 @@ function! s:showDeleted(root, base, entry) abort
     endif
 endfunction
 
-" Asks for a new base, completing refs of the float's repository.
+" Hands over to the picker (tare#picker), which brings the float back on the
+" same file when it closes.
 function! s:base() abort
-    let root = s:float.root
-    let ref = input('tare base: ', '', 'customlist,tare#popup#complete')
-    if empty(ref)
-        return
+    let f = s:float
+    let path = get(get(f.entries, line('.') - 1, {}), 'path', '')
+    call s:close()
+    if nvim_win_is_valid(f.origin)
+        call win_gotoid(f.origin)
     endif
-    redraw
-    call tare#Base(0, ref, root)
-    call s:relist()
+    call tare#picker#Open(f.root, function('s:reopen', [f.root, path]))
+endfunction
+
+function! s:reopen(root, path) abort
+    try
+        call s:show(a:root, a:path)
+    catch /^tare: /
+        call s:close()
+        call s:error(v:exception)
+    endtry
 endfunction
 
 function! s:refresh() abort
@@ -336,11 +346,6 @@ function! tare#popup#Toggle() abort
         call s:close()
         call s:error(v:exception)
     endtry
-endfunction
-
-" input() completion for `b`.
-function! tare#popup#complete(lead, cmdline, cursorpos) abort
-    return tare#git#refs(get(s:float, 'root', getcwd()), a:lead)
 endfunction
 
 " vim: set et fdm=marker sts=4 sw=4:

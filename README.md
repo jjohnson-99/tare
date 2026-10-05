@@ -37,7 +37,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim), from a local checkout:
     config = function()
         vim.keymap.set("n", "<leader>zf", vim.cmd.Tare)
         vim.keymap.set("n", "<leader>zd", vim.cmd.TareToggle)
-        vim.keymap.set("n", "<leader>zb", ":TareBase ")
+        vim.keymap.set("n", "<leader>zb", vim.cmd.TareBase)
     end
 }
 ```
@@ -51,7 +51,7 @@ tare maps no keys of its own outside the float and the view. Run
 | --- | --- |
 | `:Tare` | Open or close the float for the current repository. |
 | `:TareToggle` / `:TareEnable` / `:TareDisable` | The view in the current buffer. |
-| `:TareBase` | Show the base and merge-base. |
+| `:TareBase` | Pick a base from your branch's commits or any branch. |
 | `:TareBase {ref}` | Compare against `{ref}`; follows it after a fetch. |
 | `:TareBase! [{ref}]` | Pin the merge-base as a fixed commit. |
 | `:TareBase -` | Back to the default base. |
@@ -67,8 +67,28 @@ tare maps no keys of its own outside the float and the view. Run
 ```
 
 In the float: `<CR>` opens with the view on, `o` opens without it, `b`
-changes the base, `r` refreshes, `q` / `<Esc>` closes. A deleted file opens
-as a read-only copy of its base version.
+changes the base in the picker, `r` refreshes, `q` / `<Esc>` closes. A deleted
+file opens as a read-only copy of its base version.
+
+```
+╭──── tare base · feat/union · current: upstream/main @ 8c6a30f3 ────╮
+│   a175aa3f  3h  feat(planner): run disti… (HEAD -> feat/union, or… │
+│   d85efe9f  3h  test(union): drop optimizer guards made redundant… │
+│   5e6f4b84  3d  Merge branch 'feat/distinct-phase-1' into feat/un… │
+│   73a6acea  4d  fix(distinct): keep dist… (origin/feat/distinct-p… │
+│ ● 8c6a30f3  3d  refactor(partition): explicit partition-to-GPU pl… │
+╰──── <CR> use  p pin  <Tab> branches  / ref  - default  q close ────╯
+```
+
+The picker lists your branch's commits since the default base, as `git log`
+shows them, then the merge-base itself, marked `●` while it is the base. On
+the default base it lists the 50 latest commits. Comparing against a commit
+shows what changed from it to the working tree.
+
+In the picker: `<CR>` uses the row's branch or tag (followed after a fetch),
+or pins the commit when it has none; `p` always pins; `<Tab>` switches to a
+list of branches and back; `/` types a ref; `-` goes back to the default;
+`q` / `<Esc>` closes, back to the float if it came from there.
 
 In the view: `]c` / `[c` jump between changes. The status line reads
 `tare ↔ upstream/main  +212 -14`, or `new · 340 lines`, `deleted · 88 lines`,
@@ -82,6 +102,7 @@ The base is remembered per repository top level (so per worktree) in
 
 ```vim
 let g:tare_DefaultBases    = ['upstream/main', 'origin/main', 'main', 'master']
+let g:tare_HiddenRefs      = ['backup/*', 'archive/*']  " left out of picker, completion
 let g:tare_Style           = 'background'  " or 'text'
 let g:tare_Palette         = 'github'      " github | rose-pine | vivid | muted
 let g:tare_AddColor        = -1            " 0xRRGGBB; -1 = from the palette
@@ -203,6 +224,8 @@ end
 | `TareFloatAdd` / `TareFloatDelete` | counts in the float | link to the two above |
 | `TareFloatStatus` | `M A D R` in the float | link to `Identifier` |
 | `TareFloatTitle` | the float's title | link to `FloatTitle` |
+| `TarePickerCurrent` | `●` in the picker | link to `Special` |
+| `TarePickerSha` / `TarePickerAge` / `TarePickerRef` | SHAs, ages, branches and tags in the picker | links to `Identifier`, `Comment`, `Constant` |
 
 ### Limitations
 

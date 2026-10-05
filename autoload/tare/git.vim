@@ -63,8 +63,9 @@ endfunction
 
 " The fields of -z output. A NUL arrives as NL inside an item and a real NL
 " (only ever inside a path) as an item break, so both can be told apart.
-function! s:fields(out) abort
-    return split(join(map(copy(a:out), 'tr(v:val, "\n", "\x01")'), "\n"), "\x01")
+" [keepempty] keeps empty fields, as split() does.
+function! s:fields(out, ...) abort
+    return split(join(map(copy(a:out), 'tr(v:val, "\n", "\x01")'), "\n"), "\x01", get(a:000, 0, 0))
 endfunction
 
 " The full SHA of the commit `rev` names, or '' for none.
@@ -349,16 +350,19 @@ function! tare#git#prefetch(root, mb, paths) abort
 endfunction
 
 " Local branches, remote branches and tags of `root` that start with `lead`,
-" then `-` for the default. Symbolic refs such as origin/HEAD are left out.
+" then `-` for the default. Symbolic refs such as origin/HEAD and hidden refs
+" are left out.
 function! tare#git#refs(root, lead) abort
     try
         let refs = s:git(a:root, ['for-each-ref',
-            \ '--format=%(if)%(symref)%(then)%(else)%(refname:short)%(end)',
+            \ '--format=%(if)%(symref)%(then)%(else)%(refname) %(refname:short)%(end)',
             \ 'refs/heads', 'refs/remotes', 'refs/tags'])
     catch /^tare: /
         return []
     endtry
-    return filter(refs + ['-'], {_, ref -> !empty(ref) && stridx(ref, a:lead) == 0})
+    let names = map(filter(refs, '!empty(v:val) && !s:hidden(split(v:val)[0])'),
+        \ 'split(v:val)[1]')
+    return filter(names + ['-'], {_, ref -> stridx(ref, a:lead) == 0})
 endfunction
 
 " :TareBase completion, for the current buffer's repository.
@@ -368,6 +372,103 @@ function! tare#git#complete(lead, cmdline, cursorpos) abort
     catch /^tare: /
         return []
     endtry
+endfunction
+
+
+"=================================================
+" Hidden refs; history and branches for the picker (tare#picker).
+
+" Commits listed when HEAD has none since its default base.
+let s:FALLBACK = 50
+
+" Whether full ref name `refname` matches a g:tare_HiddenRefs glob, by its short
+" name or, for a remote branch, also by that name without the remote.
+function! s:hidden(refname) abort
+    let short = substitute(a:refname, '^refs/\%(heads\|remotes\|tags\)/', '', '')
+    let names = a:refname =~# '^refs/remotes/' ? [short, matchstr(short, '/\zs.*')] : [short]
+    for pattern in g:tare_HiddenRefs
+        if match(names, '\C' . glob2regpat(pattern)) >= 0
+            return 1
+        endif
+    endfor
+    return 0
+endfunction
+
+" A ref's kind by its prefix. A commit's refs are listed in this order.
+let s:KINDS = {'refs/remotes/': 'remote', 'refs/heads/': 'local', 'refs/tags/': 'tag'}
+let s:RANK = {'remote': 0, 'local': 1, 'tag': 2}
+
+" `git log` output as {branch, commits}: `branch` is HEAD's, '' when detached;
+" each commit is {sha, time, subject, head, refs}, `head` whether HEAD is there,
+" `refs` its visible refs other than HEAD's branch, each {name, kind}: the name
+" without its `refs/<kind>/`, the kind 'remote', 'local' or 'tag'.
+function! s:log(root, revs) abort
+    let fields = s:fields(s:git(a:root, ['log', '--no-color', '-z', '--decorate=full',
+        \ '--decorate-refs=refs/heads/', '--decorate-refs=refs/remotes/',
+        \ '--decorate-refs=refs/tags/', '--decorate-refs=HEAD',
+        \ '--format=%H%x00%ct%x00%D%x00%s'] + a:revs + ['--']), 1)
+    let out = {'branch': '', 'commits': []}
+    let i = 0
+    while i + 3 < len(fields)
+        let commit = {'sha': fields[i], 'time': str2nr(fields[i + 1]),
+            \ 'subject': fields[i + 3], 'head': 0, 'refs': []}
+        " A ref name holds no space.
+        for name in split(fields[i + 2], ', ')
+            if name =~# '^HEAD\%( -> \|$\)'
+                let commit.head = 1
+                let out.branch = matchstr(name, '^HEAD -> refs/heads/\zs.*')
+                continue
+            endif
+            let name = substitute(name, '^tag: ', '', '')
+            let kind = matchstr(name, '^refs/\%(heads\|remotes\|tags\)/')
+            if !empty(kind) && name !~# '^refs/remotes/[^/]\+/HEAD$' && !s:hidden(name)
+                call add(commit.refs, {'name': name[len(kind) :], 'kind': s:KINDS[kind]})
+            endif
+        endfor
+        call sort(commit.refs, {a, b -> s:RANK[a.kind] - s:RANK[b.kind]})
+        call add(out.commits, commit)
+        let i += 4
+    endwhile
+    return out
+endfunction
+
+" What the picker lists, as s:log gives it plus `fallback`. The commits of HEAD
+" since it left the first default base, in git's default order, then that
+" merge-base last; with no default base, or no commit since, HEAD's latest
+" s:FALLBACK. One `git log` either way: the merge-base's parents are excluded,
+" not the merge-base. [mb] is that merge-base, when already known.
+function! tare#git#log(root, ...) abort
+    try
+        let mb = a:0 ? a:1 : s:mergeBase(a:root, s:defaultRef(a:root), v:false)
+    catch /^tare: /
+        let mb = ''
+    endtry
+    if !empty(mb)
+        let log = s:log(a:root, ['HEAD', '--not', mb . '^@'])
+        if len(log.commits) > 1
+            let i = index(map(copy(log.commits), 'v:val.sha'), mb)
+            call add(log.commits, remove(log.commits, i))
+            return extend(log, {'fallback': 0})
+        endif
+    endif
+    return extend(s:log(a:root, ['-n', s:FALLBACK, 'HEAD']), {'fallback': 1})
+endfunction
+
+" Local and remote branches, newest commit first, symbolic and hidden ones left
+" out: {name, sha, time, subject}.
+function! tare#git#branches(root) abort
+    let out = s:git(a:root, ['for-each-ref', '--sort=-committerdate', '--format='
+        \ . '%(refname)%00%(refname:short)%00%(objectname)%00%(committerdate:unix)'
+        \ . '%00%(symref)%00%(subject)', 'refs/heads', 'refs/remotes'])
+    let branches = []
+    for line in filter(out, '!empty(v:val)')
+        let [refname, name, sha, time, symref, subject] = split(line, "\n", 1)
+        if empty(symref) && !s:hidden(refname)
+            call add(branches, {'name': name, 'sha': sha, 'time': str2nr(time),
+                \ 'subject': subject})
+        endif
+    endfor
+    return branches
 endfunction
 
 " vim: set et fdm=marker sts=4 sw=4:
